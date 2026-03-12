@@ -1,0 +1,4 @@
+# ignore lib files
+venv/
+__pycache__
+.vscode/

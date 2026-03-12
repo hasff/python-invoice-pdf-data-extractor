@@ -1,1 +1,1 @@
-# invoice-pdf-data-extractor
+# python-invoice-pdf-data-extractor
