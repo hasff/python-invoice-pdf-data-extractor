@@ -1,6 +1,6 @@
 from pathlib import Path
 import pdfplumber
-from draw_lines import draw_boxes
+from tools.draw_lines import draw_boxes
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side, NamedStyle
 
