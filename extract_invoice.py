@@ -1,11 +1,15 @@
 from pathlib import Path
 import pdfplumber
-from draw_lines import draw_vertical_lines, draw_boxes
+from draw_lines import draw_boxes
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side, NamedStyle
 
-INPUT_FILE = "Invoice_sample.pdf"
-OUTPUT_FILE = "example_output.xlsx"
+base_dir = Path(__file__).parent
+INPUT_FOLDER = base_dir / "input"
+OUTPUT_FOLDER = base_dir /"output"
+
+INPUT_FILE = INPUT_FOLDER / "invoice_sample.pdf"
+OUTPUT_FILE = OUTPUT_FOLDER / "invoice_data.xlsx"
 
 SPACE_BETWEEN_WORDS = 4
 
@@ -169,7 +173,7 @@ def extract_data(file_path: Path):
         subtotal_bbox = (table_left, subtotal_top, table_right, subtotal_bottom)
         vat_bbox = (table_left, vat_top, table_right, vat_bottom)
         total_bbox = (table_left, total_top, table_right, total_bottom)
-        # draw_boxes(INPUT_FILE, 'debug.pdf', [doc_header_bbox, details_bbox, table_bbox, subtotal_bbox, vat_bbox, total_bbox])
+        draw_boxes(INPUT_FILE, OUTPUT_FOLDER / 'debug.pdf', [doc_header_bbox, details_bbox, table_bbox, subtotal_bbox, vat_bbox, total_bbox])
 
         doc_header_area = page.crop(doc_header_bbox)
         details_area = page.crop(details_bbox)
@@ -305,10 +309,8 @@ def gen_excel(json_data, output_path):
 
 
 if __name__ == "__main__":
-    base_dir = Path(__file__).parent
+    data = extract_data(INPUT_FILE)
 
-    data = extract_data(base_dir / INPUT_FILE)
+    gen_excel(data, OUTPUT_FILE)
 
-    gen_excel(data, base_dir / OUTPUT_FILE)
-
-    print("Invoice generated:", base_dir / OUTPUT_FILE)
+    print("Invoice generated:", OUTPUT_FILE)
