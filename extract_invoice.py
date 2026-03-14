@@ -1,6 +1,8 @@
 from pathlib import Path
 import pdfplumber
 from draw_lines import draw_vertical_lines, draw_boxes
+import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side, NamedStyle
 
 INPUT_FILE = "Invoice_sample.pdf"
 OUTPUT_FILE = "example_output.xlsx"
@@ -45,11 +47,8 @@ def __group_line_items_as_cells(lines, words_gap= SPACE_BETWEEN_WORDS):
 
 
 def _extract_doc_header(doc_header_area):
-
     words = doc_header_area.extract_words()
-
     lines = __words_to_lines(words)
-
     headerData = __group_line_items_as_cells(lines, SPACE_BETWEEN_WORDS + 10)
 
     line = -1       
@@ -64,9 +63,22 @@ def _extract_doc_header(doc_header_area):
     
     return company_name, invoice_no, date
 
+def _extract_details(details_area, details_headers_text):
+    words = details_area.extract_words()
+    lines = __words_to_lines(words)
+    
+    dataCells = __group_line_items_as_cells(lines, SPACE_BETWEEN_WORDS)
 
-def _extract_details(details_area, details_words):
-    pass
+    headers = [__get_cell_text(cell) for cell in dataCells[0]]
+    data = [__get_cell_text(cell) for cell in dataCells[1]]
+
+    result = dict(zip(headers, data))
+
+    client = result.get('BILL TO', '')
+    po_number = result.get('DETAILS', '').replace('PO Number:', '').strip()
+    due_date = result.get('PAYMENT', '').replace('Due Date:', '').strip()
+
+    return client, po_number, due_date
 
 def _extract_table_data(table_area, headers_words):
     # get table lines
@@ -74,20 +86,6 @@ def _extract_table_data(table_area, headers_words):
 
     # group line items into cells
     tableData = __group_line_items_as_cells(textLines[1:])
-    # for line in textLines[1:]:
-    #     tableRow = [[line[0]]]
-    #     for item in line[1:]:
-    #         currStart = item['x0']
-    #         prevEnd = tableRow[-1][-1]['x1']
-
-    #         # words are close enough to be in the same table cell?
-    #         if currStart - prevEnd < SPACE_BETWEEN_WORDS: 
-    #             tableRow[-1].append(item)
-    #         else: 
-    #             tableRow.append([item])
-
-    #     tableData.append(tableRow)
-
 
     # make list of objects with header names as keys and data as values.
     table = []
@@ -126,6 +124,7 @@ def extract_data(file_path: Path):
         doc_header_bottom = page.height - r['y1'] - 10
 
         details_text = ['BILL', 'PAYMENT', 'Due']
+        details_headers_text = ['BILL TO', 'DETAILS', 'PAYMENT']
         table_headers_text = ['ITEM', 'QUANTITY', 'RATE', 'AMOUNT']
         totals_text = ['Subtotal', 'VAT', 'Total']
 
@@ -181,7 +180,7 @@ def extract_data(file_path: Path):
         total_area = page.crop(total_bbox)
 
         company_name, invoice_no, date = _extract_doc_header(doc_header_area)
-        # client_name, po_no, due_date = _extract_details(details_area, details_words)
+        client_name, po_no, due_date = _extract_details(details_area, details_headers_text)
 
 
         table = _extract_table_data(table_area, table_headers_words)
@@ -200,11 +199,11 @@ def extract_data(file_path: Path):
         return {
             "invoice_number": invoice_no,
             "invoice_date": date,
-            "due_date": "2026-03-17",
-            "po_number": "88658",
+            "due_date": due_date,
+            "po_number": po_no,
 
             "vendor": company_name,
-            "client": "ACME Data Services",
+            "client": client_name,
 
             "items": table,
             "summary": summary
@@ -214,11 +213,102 @@ def extract_data(file_path: Path):
     except Exception as e:
         print(f'Exception: {e}')
 
+
+def gen_excel(json_data, output_path): 
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Invoice Report {json_data['invoice_date']}"
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.font = Font(name='Calibri Light', size=10)    
+
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 15    
+
+    ws['A1'] = 'INVOICE REPORT'
+    ws['A1'].font = Font(size= 18, bold= True, color='FFFFFF')
+    ws['A1'].alignment = Alignment(horizontal="center", vertical="center")
+    ws['A1'].fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+    ws.merge_cells('A1:H2')
+
+
+    meta_headers = {
+        'A4': 'Vendor',     'A5': json_data['vendor'],
+        'B4': 'Client',     'B5': json_data['client'],
+        'C4': 'Invoice #',  'C5': json_data['invoice_number'],
+        'D4': 'Date',       'D5': json_data['invoice_date'],
+        'E4': 'Due Date',   'E5': json_data['due_date'],
+        'H4': 'PO Number',  'H5': json_data['po_number'],
+    }
+    thin = Side(style='thin', color='CCCCCC')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)    
+    for cell_ref, value in meta_headers.items():
+        cell = ws[cell_ref]
+        cell.value = value
+        cell.fill = PatternFill(start_color="F0F4FA", end_color="F0F4FA", fill_type="solid")
+        cell.border = border
+        row = int(cell_ref[1:])
+        if row == 4:
+            cell.font = Font(bold=True, color='888888', size=8)
+        else:
+            cell.font = Font(bold=True, size=10)    
+
+
+    items = json_data['items']
+    headers = list(items[0].keys())
+
+    for idx, header in enumerate(headers, start= 1):
+        cell = ws.cell(row= 7, column= idx, value= header)
+        cell.fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
+        cell.font = Font(color="FFFFFF")
+
+    thin_border = Border(
+        bottom=Side(style='thin', color='E0E0E0')
+    )    
+    for rowIdx, key in enumerate(items, start= 8):
+        bg_color = "F5F5F5" if rowIdx % 2 == 0 else "FFFFFF"
+        for colIdx, value in enumerate(key.values(), start= 1):
+            cell = ws.cell(row= rowIdx, column= colIdx, value= value)
+            cell.fill = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+            cell.border = thin_border
+            if colIdx > 1:
+                cell.alignment = Alignment(horizontal="right")            
+
+
+    last_item_row = rowIdx + 2
+    summary = json_data['summary']
+    summary_keys = list(summary.keys())
+
+    for i, key in enumerate(summary_keys[:-1]): 
+        r = last_item_row + i
+        ws.cell(row=r, column=3, value=key).font = Font(color='888888')
+        ws.cell(row=r, column=4, value=summary[key]).alignment = Alignment(horizontal="right")
+
+    total_row = last_item_row + len(summary_keys) - 1
+    for col in range(1, 5):
+        cell = ws.cell(row=total_row, column=col)
+        cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+        cell.font = Font(color="FFFFFF", bold=True)
+
+    ws.cell(row=total_row, column=3, value='Total')
+    ws.cell(row=total_row, column=4, value=summary['Total']).alignment = Alignment(horizontal="right")
+    ws.cell(row=total_row, column=4).font = Font(color="FFFFFF", bold=True)
+
+
+    wb.save(output_path)
+
+
 if __name__ == "__main__":
     base_dir = Path(__file__).parent
 
     data = extract_data(base_dir / INPUT_FILE)
 
-    print(data)
+    gen_excel(data, base_dir / OUTPUT_FILE)
 
     print("Invoice generated:", base_dir / OUTPUT_FILE)
