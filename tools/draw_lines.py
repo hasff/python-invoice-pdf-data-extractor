@@ -85,11 +85,3 @@ def draw_word_boxes(input_pdf, output_pdf, words):
         )
 
     doc.save(output_pdf)
-
-# x_positions = [200, 420, 480, 540]
-
-# draw_vertical_lines(
-#     "Invoice_sample.pdf",
-#     "invoice_debug.pdf",
-#     x_positions
-# )
