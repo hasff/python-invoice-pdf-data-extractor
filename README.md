@@ -101,6 +101,8 @@ I help companies automate document processing pipelines:
 
 🌐 Courses and professional tools: https://hasff.github.io/site/
 
+🔗 LinkedIn: https://www.linkedin.com/in/hugo-ferro-1434b414/
+
 ---
 
 ## Further Learning
